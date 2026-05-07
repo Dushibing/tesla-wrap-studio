@@ -103,7 +103,7 @@ func (r *Renderer) Render(m *model.VehicleModel, images map[string]io.Reader, op
 			scaledH = 1
 		}
 
-		var scaled image.Image = scaleNearest(userImg, scaledW, scaledH)
+		var scaled image.Image = scaleBilinear(userImg, scaledW, scaledH)
 
 		// Apply horizontal flip
 		shouldFlip := view.FlipH
@@ -356,19 +356,36 @@ func drawViewImage(dst *image.NRGBA, view model.View, offsetX, offsetY int, src 
 		return
 	}
 
+	// Bleed 2px on each side to prevent white seams between adjacent views
+	const bleed = 2
+
 	drawRect := image.Rect(
-		targetRect.Min.X+(targetRect.Dx()-srcW)/2+offsetX,
-		targetRect.Min.Y+(targetRect.Dy()-srcH)/2+offsetY,
-		targetRect.Min.X+(targetRect.Dx()-srcW)/2+offsetX+srcW,
-		targetRect.Min.Y+(targetRect.Dy()-srcH)/2+offsetY+srcH,
+		targetRect.Min.X+(targetRect.Dx()-srcW)/2+offsetX-bleed,
+		targetRect.Min.Y+(targetRect.Dy()-srcH)/2+offsetY-bleed,
+		targetRect.Min.X+(targetRect.Dx()-srcW)/2+offsetX+srcW+bleed,
+		targetRect.Min.Y+(targetRect.Dy()-srcH)/2+offsetY+srcH+bleed,
 	)
 
-	clipRect := drawRect.Intersect(targetRect).Intersect(dst.Bounds())
+	// Expand clip region outward to allow edge bleeding into adjacent areas
+	expandedTarget := image.Rect(
+		targetRect.Min.X-bleed,
+		targetRect.Min.Y-bleed,
+		targetRect.Max.X+bleed,
+		targetRect.Max.Y+bleed,
+	)
+	clipRect := drawRect.Intersect(expandedTarget).Intersect(dst.Bounds())
 	if clipRect.Empty() {
 		return
 	}
 
 	sourcePoint := srcBounds.Min.Add(clipRect.Min.Sub(drawRect.Min))
+	// Clamp source point to valid range
+	if sourcePoint.X < srcBounds.Min.X {
+		sourcePoint.X = srcBounds.Min.X
+	}
+	if sourcePoint.Y < srcBounds.Min.Y {
+		sourcePoint.Y = srcBounds.Min.Y
+	}
 	draw.Draw(dst, clipRect, src, sourcePoint, draw.Over)
 }
 
@@ -576,6 +593,71 @@ func SavePNG(path string, img image.Image) error {
 	}
 	defer f.Close()
 	return png.Encode(f, img)
+}
+
+// scaleBilinear high-quality bilinear scaling for user images
+func scaleBilinear(img image.Image, targetW, targetH int) *image.NRGBA {
+	bounds := img.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+	if srcW == 0 || srcH == 0 {
+		return convertToNRGBA(img)
+	}
+	if targetW <= 0 || targetH <= 0 {
+		return convertToNRGBA(img)
+	}
+	if srcW == targetW && srcH == targetH {
+		return convertToNRGBA(img)
+	}
+
+	scaleX := float64(srcW) / float64(targetW)
+	scaleY := float64(srcH) / float64(targetH)
+
+	out := image.NewNRGBA(image.Rect(0, 0, targetW, targetH))
+
+	for y := 0; y < targetH; y++ {
+		sy := (float64(y) + 0.5)*scaleY - 0.5
+		if sy < 0 {
+			sy = 0
+		}
+		if sy >= float64(srcH)-1 {
+			sy = float64(srcH) - 1
+		}
+		iy := int(sy)
+		fy := sy - float64(iy)
+		ny := min(iy+1, srcH-1)
+
+		for x := 0; x < targetW; x++ {
+			sx := (float64(x) + 0.5)*scaleX - 0.5
+			if sx < 0 {
+				sx = 0
+			}
+			if sx >= float64(srcW)-1 {
+				sx = float64(srcW) - 1
+			}
+			ix := int(sx)
+			fx := sx - float64(ix)
+			nx := min(ix+1, srcW-1)
+
+			if fx == 0 && fy == 0 {
+				out.SetNRGBA(x, y, toNRGBA(img.At(ix, iy)))
+				continue
+			}
+
+			c00 := toNRGBA(img.At(ix, iy))
+			c10 := toNRGBA(img.At(nx, iy))
+			c01 := toNRGBA(img.At(ix, ny))
+			c11 := toNRGBA(img.At(nx, ny))
+
+			out.SetNRGBA(x, y, color.NRGBA{
+				R: uint8(float64(c00.R)*(1-fx)*(1-fy) + float64(c10.R)*fx*(1-fy) + float64(c01.R)*(1-fx)*fy + float64(c11.R)*fx*fy),
+				G: uint8(float64(c00.G)*(1-fx)*(1-fy) + float64(c10.G)*fx*(1-fy) + float64(c01.G)*(1-fx)*fy + float64(c11.G)*fx*fy),
+				B: uint8(float64(c00.B)*(1-fx)*(1-fy) + float64(c10.B)*fx*(1-fy) + float64(c01.B)*(1-fx)*fy + float64(c11.B)*fx*fy),
+				A: uint8(float64(c00.A)*(1-fx)*(1-fy) + float64(c10.A)*fx*(1-fy) + float64(c01.A)*(1-fx)*fy + float64(c11.A)*fx*fy),
+			})
+		}
+	}
+	return out
 }
 
 // scaleNearest nearest-neighbor scaling — fast, maintains pixel crispness

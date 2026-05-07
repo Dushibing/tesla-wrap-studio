@@ -290,7 +290,7 @@ func displayName(id string) string {
 		} else if p == "premium" {
 			variant = "Premium"
 		} else if modelName == "" {
-			modelName = strings.Title(p)
+			modelName = titleCase(p)
 		}
 	}
 
@@ -444,6 +444,15 @@ func nameViews(views []View, tmplW, tmplH int) {
 func abs(x int) int {
 	if x < 0 { return -x }
 	return x
+}
+
+// titleCase converts "hello" to "Hello" (replaces deprecated strings.Title)
+func titleCase(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	return strings.ToUpper(string(r[0])) + string(r[1:])
 }
 
 // LoadViewMappings loads pre-computed view coordinates from a JSON file
