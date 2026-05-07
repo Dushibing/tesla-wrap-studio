@@ -78,11 +78,32 @@ func (r *Renderer) Render(m *model.VehicleModel, images map[string]io.Reader, op
 			continue
 		}
 
-		// Scale user image to fit the view region while maintaining aspect ratio
-		scaled := scaleImageFit(userImg, view.W, view.H)
-
-		// Apply user adjustments
 		adj := options.Adjustments[view.Name]
+
+		// Compute final target size once to avoid double scaling quality loss
+		scaleFactor := 1.0
+		if adj.Scale > 0 {
+			scaleFactor = float64(adj.Scale) / 100.0
+		}
+
+		srcBounds := userImg.Bounds()
+		srcW, srcH := srcBounds.Dx(), srcBounds.Dy()
+		if srcW == 0 || srcH == 0 {
+			continue
+		}
+
+		fitScale := math.Min(float64(view.W)/float64(srcW), float64(view.H)/float64(srcH))
+		finalScale := fitScale * scaleFactor
+		scaledW := int(float64(srcW) * finalScale)
+		scaledH := int(float64(srcH) * finalScale)
+		if scaledW <= 0 {
+			scaledW = 1
+		}
+		if scaledH <= 0 {
+			scaledH = 1
+		}
+
+		var scaled image.Image = scaleNearest(userImg, scaledW, scaledH)
 
 		// Apply horizontal flip
 		shouldFlip := view.FlipH
@@ -97,12 +118,6 @@ func (r *Renderer) Render(m *model.VehicleModel, images map[string]io.Reader, op
 		rotation := view.Rotation + float64(adj.Rotate)
 		if rotation != 0 {
 			scaled = rotateImage(scaled, rotation)
-		}
-
-		// Apply scaling from user adjustment
-		if adj.Scale > 0 && adj.Scale != 100 {
-			scaleFactor := float64(adj.Scale) / 100.0
-			scaled = scaleImageAbsolute(scaled, int(float64(view.W)*scaleFactor), int(float64(view.H)*scaleFactor))
 		}
 
 		// Center transformed content in the target region, then apply user offsets.
@@ -134,7 +149,8 @@ func (r *Renderer) matchGapColors(img *image.NRGBA, m *model.VehicleModel) {
 
 		// Find the adjacent view by looking at spatial proximity
 		var adjacent *model.View
-		for _, other := range m.Views {
+		for i := range m.Views {
+			other := &m.Views[i]
 			if view.Name == other.Name {
 				continue
 			}
@@ -143,12 +159,12 @@ func (r *Renderer) matchGapColors(img *image.NRGBA, m *model.VehicleModel) {
 			case "left", "right":
 				// Check if views are vertically overlapping (same row)
 				if other.Y < view.Y+view.H && other.Y+other.H > view.Y {
-					adjacent = &other
+					adjacent = other
 				}
 			case "top", "bottom":
 				// Check if views are horizontally overlapping (same column)
 				if other.X < view.X+view.W && other.X+other.W > view.X {
-					adjacent = &other
+					adjacent = other
 				}
 			}
 
