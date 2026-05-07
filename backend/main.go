@@ -27,7 +27,7 @@ func main() {
 	model.LoadViewMappings("view_mappings.json")
 
 	registry := model.NewRegistry("templates")
-	rend := renderer.New(registry)
+	rend := renderer.New()
 
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/models", handleModels(registry))
