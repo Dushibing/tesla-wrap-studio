@@ -19,35 +19,60 @@ const VIEW_COLORS = {
   top: '#9B59B6',
 }
 
+function groupModels(models) {
+  const groups = {}
+  for (const m of models) {
+    let series = m.id
+    if (series.startsWith('model3')) series = 'model3'
+    else if (series.startsWith('modely')) series = 'modely'
+    else if (series.startsWith('models')) series = 'models'
+    else if (series.startsWith('modelx')) series = 'modelx'
+    if (!groups[series]) groups[series] = { id: series, models: [] }
+    groups[series].models.push(m)
+  }
+  return groups
+}
+
+const SERIES_ORDER = ['cybertruck', 'model3', 'modely', 'models', 'modelx']
+const SERIES_LABELS = { cybertruck:'Cybertruck', model3:'Model 3', modely:'Model Y', models:'Model S', modelx:'Model X' }
+const SERIES_ICONS = { cybertruck:'🛻', model3:'🚗', modely:'🚙', models:'🏎️', modelx:'🚘' }
+
 export default function App() {
   const [models, setModels] = useState([])
+  const [modelGroups, setModelGroups] = useState({})
   const [selectedModel, setSelectedModel] = useState('')
   const [modelDetails, setModelDetails] = useState(null)
   const [images, setImages] = useState({})
   const [adjustments, setAdjustments] = useState({})
-  const [activeAdjust, setActiveAdjust] = useState(null)
   const [templateUrl, setTemplateUrl] = useState('')
   const [rendering, setRendering] = useState(false)
   const [resultUrl, setResultUrl] = useState(null)
   const [dragOver, setDragOver] = useState(null)
   const [error, setError] = useState('')
-  const [panel, setPanel] = useState('upload') // 'upload' | 'adjust'
-  const previewRef = useRef(null)
+
+  // Drag state for overlay adjustment
+  const [selectedView, setSelectedView] = useState(null)
+  const dragging = useRef(null) // { viewName, startX, startY, origOffX, origOffY }
+  const previewRect = useRef(null)
   const resultUrlRef = useRef(null)
+  const previewRef = useRef(null)
 
   useEffect(() => {
     fetch(`${API_BASE}/api/models`)
       .then(r => r.json())
       .then(data => {
         setModels(data)
-        if (data.length > 0) setSelectedModel(data[0].id)
+        setModelGroups(groupModels(data))
+        const firstGroupId = SERIES_ORDER.find(k => groupModels(data)[k]?.models.length > 0)
+        if (firstGroupId) {
+          setSelectedModel(groupModels(data)[firstGroupId].models[0].id)
+        }
       })
       .catch(e => setError('加载车型列表失败: ' + e.message))
   }, [])
 
   useEffect(() => {
     if (!selectedModel) return
-    // Revoke old result URL when model changes
     if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
     resultUrlRef.current = null
     setResultUrl(null)
@@ -57,13 +82,12 @@ export default function App() {
       .then(data => setModelDetails(data))
       .catch(e => setError('加载车型详情失败: ' + e.message))
     setAdjustments({})
-    setActiveAdjust(null)
+    setSelectedView(null)
   }, [selectedModel])
 
   const handleImageUpload = useCallback((viewName, file) => {
     setImages(prev => ({ ...prev, [viewName]: file }))
     setResultUrl(null)
-    // Initialize adjustment for this view
     setAdjustments(prev => ({
       ...prev,
       [viewName]: prev[viewName] || { scale: 100, rotate: 0, offsetX: 0, offsetY: 0, flipH: false },
@@ -90,6 +114,59 @@ export default function App() {
     if (file) handleImageUpload(viewName, file)
   }, [handleImageUpload])
 
+  // --- Mouse drag on preview overlays ---
+  const handleOverlayMouseDown = useCallback((e, viewName) => {
+    e.stopPropagation()
+    setSelectedView(viewName)
+    const rect = previewRef.current?.getBoundingClientRect()
+    if (!rect) return
+    previewRect.current = rect
+    const adj = adjustments[viewName] || { offsetX: 0, offsetY: 0 }
+    dragging.current = {
+      viewName,
+      startX: e.clientX,
+      startY: e.clientY,
+      origOffX: adj.offsetX || 0,
+      origOffY: adj.offsetY || 0,
+    }
+  }, [adjustments])
+
+  const handleOverlayWheel = useCallback((e, viewName) => {
+    e.preventDefault()
+    e.stopPropagation()
+    const adj = adjustments[viewName] || { scale: 100 }
+    const delta = e.deltaY > 0 ? -5 : 5
+    const newScale = Math.max(30, Math.min(300, (adj.scale || 100) + delta))
+    updateAdjustment(viewName, 'scale', newScale)
+  }, [adjustments, updateAdjustment])
+
+  useEffect(() => {
+    const handleMouseMove = (e) => {
+      if (!dragging.current) return
+      const { viewName, startX, startY, origOffX, origOffY } = dragging.current
+      const rect = previewRect.current
+      if (!rect) return
+      const templateEl = previewRef.current?.querySelector('.template-image')
+      if (!templateEl) return
+      const tRect = templateEl.getBoundingClientRect()
+      const scaleX = (modelDetails?.width || 1) / tRect.width
+      const scaleY = (modelDetails?.height || 1) / tRect.height
+      const dx = (e.clientX - startX) * scaleX
+      const dy = (e.clientY - startY) * scaleY
+      updateAdjustment(viewName, 'offsetX', Math.round(origOffX + dx))
+      updateAdjustment(viewName, 'offsetY', Math.round(origOffY + dy))
+    }
+    const handleMouseUp = () => {
+      dragging.current = null
+    }
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleMouseUp)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleMouseUp)
+    }
+  }, [modelDetails, updateAdjustment])
+
   const handleRender = async () => {
     if (!selectedModel || Object.keys(images).length === 0) {
       setError('请先选择车型并上传至少一张图片')
@@ -104,7 +181,6 @@ export default function App() {
     for (const [view, file] of Object.entries(images)) {
       formData.append(view, file)
     }
-    // Send adjustments as JSON
     formData.append('adjustments', JSON.stringify(adjustments))
 
     try {
@@ -117,7 +193,6 @@ export default function App() {
         throw new Error(text)
       }
       const blob = await res.blob()
-      // Revoke old URL before creating new one
       if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
       const url = URL.createObjectURL(blob)
       resultUrlRef.current = url
@@ -138,16 +213,9 @@ export default function App() {
   }
 
   const handleClearView = (viewName) => {
-    setImages(prev => {
-      const next = { ...prev }
-      delete next[viewName]
-      return next
-    })
-    setAdjustments(prev => {
-      const next = { ...prev }
-      delete next[viewName]
-      return next
-    })
+    setImages(prev => { const n = { ...prev }; delete n[viewName]; return n })
+    setAdjustments(prev => { const n = { ...prev }; delete n[viewName]; return n })
+    if (selectedView === viewName) setSelectedView(null)
   }
 
   return (
@@ -155,15 +223,7 @@ export default function App() {
       <header className="header">
         <div className="header-content">
           <h1><span className="logo">🚗</span> Tesla Wrap Studio</h1>
-          <p className="subtitle">自定义特斯拉车身贴膜设计工具</p>
-          <div className="header-tabs">
-            <button className={`tab ${panel === 'upload' ? 'active' : ''}`} onClick={() => setPanel('upload')}>
-              📤 上传图片
-            </button>
-            <button className={`tab ${panel === 'adjust' ? 'active' : ''}`} onClick={() => setPanel('adjust')}>
-              🎛️ 调整视图
-            </button>
-          </div>
+          <p className="subtitle">自定义特斯拉车身贴膜设计工具 — 拖拽视图调整位置，滚轮缩放</p>
         </div>
       </header>
 
@@ -175,117 +235,73 @@ export default function App() {
           </div>
         )}
 
-        <section className="section">
+        <section className="section" style={{ marginBottom: 12 }}>
           <label className="section-label">选择车型</label>
           <select className="model-select"
             value={selectedModel}
             onChange={e => setSelectedModel(e.target.value)}>
-            {models.map(m => (
-              <option key={m.id} value={m.id}>{m.name}</option>
-            ))}
+            {SERIES_ORDER.filter(sid => modelGroups[sid]?.models.length > 0).map(sid => {
+              const group = modelGroups[sid]
+              return (
+                <optgroup key={sid} label={`${SERIES_ICONS[sid]} ${SERIES_LABELS[sid]}`}>
+                  {group.models.map(m => (
+                    <option key={m.id} value={m.id}>{m.name}</option>
+                  ))}
+                </optgroup>
+              )
+            })}
           </select>
         </section>
 
         <div className="workspace">
-          {/* Left panel: upload or adjust */}
+          {/* Left: upload grid */}
           <section className="section upload-panel">
-            {panel === 'upload' ? (
-              <>
-                <label className="section-label">上传图片（点击或拖拽）</label>
-                <div className="upload-grid">
-                  {(modelDetails ? modelDetails.views : []).map(view => {
-                    const adj = adjustments[view.name] || { scale: 100, rotate: 0, offsetX: 0, offsetY: 0, flipH: false }
-                    return (
-                      <UploadBox
-                        key={view.name}
-                        viewName={view.name}
-                        label={VIEW_LABELS[view.name] || view.name}
-                        color={VIEW_COLORS[view.name] || '#666'}
-                        file={images[view.name]}
-                        onUpload={handleImageUpload}
-                        onDrop={handleDrop}
-                        onClear={() => handleClearView(view.name)}
-                        dragOver={dragOver}
-                        setDragOver={setDragOver}
-                        adjustments={adj}
-                      />
-                    )
-                  })}
-                </div>
-              </>
-            ) : (
-              <>
-                <label className="section-label">调整视图位置与效果</label>
-                <div className="adjust-list">
-                  {(modelDetails ? modelDetails.views : []).map(view => {
-                    const file = images[view.name]
-                    if (!file) return null
-                    const adj = adjustments[view.name] || { scale: 100, rotate: 0, offsetX: 0, offsetY: 0, flipH: false }
-                    const isActive = activeAdjust === view.name
-                    return (
-                      <div key={view.name} className={`adjust-item ${isActive ? 'active' : ''}`}
-                        onClick={() => setActiveAdjust(view.name)}>
-                        <div className="adjust-header">
-                          <span className="adjust-label" style={{ background: VIEW_COLORS[view.name] }}>
-                            {VIEW_LABELS[view.name]}
-                          </span>
-                          <div className="adjust-preview-thumb">
-                            <img src={URL.createObjectURL(file)} alt="" />
-                          </div>
-                        </div>
-                        {isActive && (
-                          <div className="adjust-controls" onClick={e => e.stopPropagation()}>
-                            <div className="adjust-row">
-                              <span className="adjust-row-label">缩放</span>
-                              <input type="range" min="30" max="200"
-                                value={adj.scale || 100}
-                                onChange={e => updateAdjustment(view.name, 'scale', parseInt(e.target.value))} />
-                              <span className="adjust-value">{adj.scale || 100}%</span>
-                            </div>
-                            <div className="adjust-row">
-                              <span className="adjust-row-label">旋转</span>
-                              <input type="range" min="-180" max="180"
-                                value={adj.rotate || 0}
-                                onChange={e => updateAdjustment(view.name, 'rotate', parseInt(e.target.value))} />
-                              <span className="adjust-value">{adj.rotate || 0}°</span>
-                            </div>
-                            <div className="adjust-row">
-                              <span className="adjust-row-label">水平偏移</span>
-                              <input type="range" min="-50" max="50"
-                                value={adj.offsetX || 0}
-                                onChange={e => updateAdjustment(view.name, 'offsetX', parseInt(e.target.value))} />
-                              <span className="adjust-value">{adj.offsetX || 0}px</span>
-                            </div>
-                            <div className="adjust-row">
-                              <span className="adjust-row-label">垂直偏移</span>
-                              <input type="range" min="-50" max="50"
-                                value={adj.offsetY || 0}
-                                onChange={e => updateAdjustment(view.name, 'offsetY', parseInt(e.target.value))} />
-                              <span className="adjust-value">{adj.offsetY || 0}px</span>
-                            </div>
-                            <div className="adjust-row">
-                              <span className="adjust-row-label">水平翻转</span>
-                              <label className="toggle-switch">
-                                <input type="checkbox"
-                                  checked={adj.flipH || false}
-                                  onChange={e => updateAdjustment(view.name, 'flipH', e.target.checked)} />
-                                <span className="toggle-slider"></span>
-                              </label>
-                              <span className="adjust-value">{adj.flipH ? '已翻转' : '正常'}</span>
-                            </div>
-                          </div>
-                        )}
-                      </div>
-                    )
-                  })}
-                </div>
-              </>
-            )}
+            <label className="section-label">上传图片（点击或拖拽文件到对应区域）</label>
+            <div className="upload-grid">
+              {(modelDetails ? modelDetails.views : []).filter(v => !v.skip).map(view => {
+                const adj = adjustments[view.name] || { scale: 100, rotate: 0, offsetX: 0, offsetY: 0, flipH: false }
+                return (
+                  <UploadBox
+                    key={view.name}
+                    viewName={view.name}
+                    label={VIEW_LABELS[view.name] || view.name}
+                    color={VIEW_COLORS[view.name] || '#666'}
+                    file={images[view.name]}
+                    onUpload={handleImageUpload}
+                    onDrop={handleDrop}
+                    onClear={() => handleClearView(view.name)}
+                    dragOver={dragOver}
+                    setDragOver={setDragOver}
+                    adjustments={adj}
+                  />
+                )
+              })}
+            </div>
           </section>
 
-          {/* Right panel: preview */}
+          {/* Right: preview with draggable overlays */}
           <section className="section preview-panel">
-            <label className="section-label">预览与结果</label>
+            <label className="section-label">
+              预览区域
+              {selectedView && (
+                <span className="selected-view-hint" style={{ color: VIEW_COLORS[selectedView] }}>
+                  — 选中 {VIEW_LABELS[selectedView]}：拖拽移动 · 滚轮缩放
+                  <button className="flip-btn"
+                    onClick={() => updateAdjustment(selectedView, 'flipH', !(adjustments[selectedView]?.flipH || false))}>
+                    {adjustments[selectedView]?.flipH ? '↔ 已翻转' : '↔ 翻转'}
+                  </button>
+                  <button className="reset-btn"
+                    onClick={() => {
+                      updateAdjustment(selectedView, 'offsetX', 0)
+                      updateAdjustment(selectedView, 'offsetY', 0)
+                      updateAdjustment(selectedView, 'scale', 100)
+                      updateAdjustment(selectedView, 'rotate', 0)
+                    }}>
+                    ↺ 重置
+                  </button>
+                </span>
+              )}
+            </label>
             <div className="template-preview" ref={previewRef}>
               {resultUrl ? (
                 <img src={resultUrl} alt="渲染结果" className="render-result" />
@@ -293,21 +309,25 @@ export default function App() {
                 <>
                   <img src={templateUrl} alt="模板" className="template-image" />
                   <div className="view-overlay">
-                    {modelDetails && modelDetails.views.map(view => {
+                    {modelDetails && modelDetails.views.filter(v => !v.skip).map(view => {
                       const file = images[view.name]
                       if (!file) return null
                       const imgUrl = URL.createObjectURL(file)
                       const adj = adjustments[view.name] || { scale: 100, rotate: 0, offsetX: 0, offsetY: 0, flipH: false }
+                      const isSelected = selectedView === view.name
                       return (
                         <div key={view.name}
-                          className="view-overlay-region"
+                          className={`view-overlay-region ${isSelected ? 'selected' : ''}`}
                           style={{
                             left: `${(view.x / modelDetails.width) * 100}%`,
                             top: `${(view.y / modelDetails.height) * 100}%`,
                             width: `${(view.w / modelDetails.width) * 100}%`,
                             height: `${(view.h / modelDetails.height) * 100}%`,
-                            borderColor: VIEW_COLORS[view.name],
-                          }}>
+                            borderColor: isSelected ? '#fff' : VIEW_COLORS[view.name],
+                            zIndex: isSelected ? 10 : 1,
+                          }}
+                          onMouseDown={e => handleOverlayMouseDown(e, view.name)}
+                          onWheel={e => handleOverlayWheel(e, view.name)}>
                           <div className="overlay-image-wrapper"
                             style={{
                               transform: `scale(${adj.scale / 100}) rotate(${adj.rotate || 0}deg) translate(${adj.offsetX || 0}px, ${adj.offsetY || 0}px)`,
@@ -317,8 +337,10 @@ export default function App() {
                               className="overlay-image"
                               style={{
                                 width: '100%', height: '100%',
-                                objectFit: 'cover', opacity: 0.7,
+                                objectFit: 'cover',
+                                opacity: isSelected ? 0.85 : 0.6,
                                 transform: adj.flipH ? 'scaleX(-1)' : 'none',
+                                cursor: 'grab',
                               }}
                             />
                           </div>
@@ -328,6 +350,10 @@ export default function App() {
                         </div>
                       )
                     })}
+                    {/* Click empty area to deselect */}
+                    {!resultUrl && (
+                      <div className="overlay-click-catcher" onClick={() => setSelectedView(null)} />
+                    )}
                   </div>
                 </>
               )}
@@ -347,7 +373,7 @@ export default function App() {
             </div>
             {modelDetails && (
               <div className="model-info">
-                <small>模板: {modelDetails.width}×{modelDetails.height} | 视图: {modelDetails.views_count}个 | 已上传: {Object.keys(images).length}/{modelDetails.views_count}</small>
+                <small>已上传: {Object.keys(images).length}/{modelDetails.views_count}个视图</small>
               </div>
             )}
           </section>
@@ -375,16 +401,9 @@ function UploadBox({ viewName, label, color, file, onUpload, onDrop, onClear, dr
       {previewUrl ? (
         <div className="upload-preview">
           <img src={previewUrl} alt={label}
-            style={{
-              transform: adjustments?.flipH ? 'scaleX(-1)' : 'none',
-            }} />
+            style={{ transform: adjustments?.flipH ? 'scaleX(-1)' : 'none' }} />
           <button className="upload-remove" onClick={e => { e.stopPropagation(); onClear() }}>✕</button>
           <div className="upload-badge">✓</div>
-          {adjustments && (adjustments.scale !== 100 || adjustments.rotate !== 0) && (
-            <div className="upload-adjust-badge">
-              {adjustments.scale}% {adjustments.rotate ? `${adjustments.rotate}°` : ''}
-            </div>
-          )}
         </div>
       ) : (
         <div className="upload-placeholder">
