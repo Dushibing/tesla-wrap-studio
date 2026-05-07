@@ -33,6 +33,7 @@ export default function App() {
   const [error, setError] = useState('')
   const [panel, setPanel] = useState('upload') // 'upload' | 'adjust'
   const previewRef = useRef(null)
+  const resultUrlRef = useRef(null)
 
   useEffect(() => {
     fetch(`${API_BASE}/api/models`)
@@ -46,6 +47,9 @@ export default function App() {
 
   useEffect(() => {
     if (!selectedModel) return
+    // Revoke old result URL when model changes
+    if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
+    resultUrlRef.current = null
     setResultUrl(null)
     setTemplateUrl(`${API_BASE}/api/models/${selectedModel}/template`)
     fetch(`${API_BASE}/api/models/${selectedModel}`)
@@ -113,7 +117,10 @@ export default function App() {
         throw new Error(text)
       }
       const blob = await res.blob()
+      // Revoke old URL before creating new one
+      if (resultUrlRef.current) URL.revokeObjectURL(resultUrlRef.current)
       const url = URL.createObjectURL(blob)
+      resultUrlRef.current = url
       setResultUrl(url)
     } catch (e) {
       setError('渲染失败: ' + e.message)

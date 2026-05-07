@@ -78,8 +78,8 @@ func (r *Renderer) Render(m *model.VehicleModel, images map[string]io.Reader, op
 			continue
 		}
 
-		// Scale user image to fit the view region
-		scaled := scaleImage(userImg, view.W, view.H)
+		// Scale user image to fit the view region while maintaining aspect ratio
+		scaled := scaleImageFit(userImg, view.W, view.H)
 
 		// Apply user adjustments
 		adj := options.Adjustments[view.Name]
@@ -386,8 +386,34 @@ func scaleImageAbsolute(img image.Image, targetW, targetH int) image.Image {
 	return out
 }
 
-// scaleImage scales an image to fit within the target dimensions while maintaining aspect ratio
+// scaleImageFit scales an image to fit WITHIN target dimensions while maintaining aspect ratio
+func scaleImageFit(img image.Image, targetW, targetH int) image.Image {
+	bounds := img.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+	if srcW == 0 || srcH == 0 {
+		return img
+	}
+	if targetW <= 0 || targetH <= 0 {
+		return img
+	}
+	// Compute uniform scale to fit within target
+	scale := math.Min(float64(targetW)/float64(srcW), float64(targetH)/float64(srcH))
+	scaledW := int(float64(srcW) * scale)
+	scaledH := int(float64(srcH) * scale)
+	if scaledW == 0 || scaledH == 0 {
+		scaledW, scaledH = 1, 1
+	}
+	return scaleNearest(img, scaledW, scaledH)
+}
+
+// scaleImage fills target dimensions (may stretch to fill)
 func scaleImage(img image.Image, targetW, targetH int) image.Image {
+	return scaleImageFill(img, targetW, targetH)
+}
+
+// scaleImageFill scales an image to exactly fill target dimensions (may distort aspect ratio)
+func scaleImageFill(img image.Image, targetW, targetH int) image.Image {
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
@@ -407,7 +433,6 @@ func scaleImage(img image.Image, targetW, targetH int) image.Image {
 	scaleY := float64(targetH) / float64(srcH)
 
 	// Use bilinear interpolation
-	// (In production, use github.com/disintegration/imaging for better quality)
 	out := image.NewNRGBA(image.Rect(0, 0, targetW, targetH))
 
 	for y := 0; y < targetH; y++ {
@@ -416,7 +441,6 @@ func scaleImage(img image.Image, targetW, targetH int) image.Image {
 			sx := float64(x) / scaleX
 			sy := float64(y) / scaleY
 
-			// Clamp and bilinear sample
 			sx = math.Max(0, math.Min(float64(srcW-1), sx))
 			sy = math.Max(0, math.Min(float64(srcH-1), sy))
 
@@ -428,7 +452,6 @@ func scaleImage(img image.Image, targetW, targetH int) image.Image {
 				continue
 			}
 
-			// Bilinear interpolation
 			nx := min(ix+1, srcW-1)
 			ny := min(iy+1, srcH-1)
 
@@ -441,7 +464,7 @@ func scaleImage(img image.Image, targetW, targetH int) image.Image {
 				R: uint8(float64(c00.R)*(1-fx)*(1-fy) + float64(c10.R)*fx*(1-fy) + float64(c01.R)*(1-fx)*fy + float64(c11.R)*fx*fy),
 				G: uint8(float64(c00.G)*(1-fx)*(1-fy) + float64(c10.G)*fx*(1-fy) + float64(c01.G)*(1-fx)*fy + float64(c11.G)*fx*fy),
 				B: uint8(float64(c00.B)*(1-fx)*(1-fy) + float64(c10.B)*fx*(1-fy) + float64(c01.B)*(1-fx)*fy + float64(c11.B)*fx*fy),
-				A: 255,
+				A: uint8(float64(c00.A)*(1-fx)*(1-fy) + float64(c10.A)*fx*(1-fy) + float64(c01.A)*(1-fx)*fy + float64(c11.A)*fx*fy),
 			}
 			out.SetNRGBA(x, y, blended)
 		}
@@ -509,13 +532,7 @@ func toNRGBA(c color.Color) color.NRGBA {
 	if nc, ok := c.(color.NRGBA); ok {
 		return nc
 	}
-	r, g, b, a := c.RGBA()
-	return color.NRGBA{
-		R: uint8(r >> 8),
-		G: uint8(g >> 8),
-		B: uint8(b >> 8),
-		A: uint8(a >> 8),
-	}
+	return color.NRGBAModel.Convert(c).(color.NRGBA)
 }
 
 func convertToNRGBA(img image.Image) *image.NRGBA {
@@ -543,4 +560,33 @@ func SavePNG(path string, img image.Image) error {
 	}
 	defer f.Close()
 	return png.Encode(f, img)
+}
+
+// scaleNearest nearest-neighbor scaling — fast, maintains pixel crispness
+func scaleNearest(img image.Image, targetW, targetH int) *image.NRGBA {
+	bounds := img.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+	if srcW == 0 || srcH == 0 {
+		return convertToNRGBA(img)
+	}
+
+	out := image.NewNRGBA(image.Rect(0, 0, targetW, targetH))
+	scaleX := float64(srcW) / float64(targetW)
+	scaleY := float64(srcH) / float64(targetH)
+
+	for y := 0; y < targetH; y++ {
+		sy := int(float64(y) * scaleY)
+		if sy >= srcH {
+			sy = srcH - 1
+		}
+		for x := 0; x < targetW; x++ {
+			sx := int(float64(x) * scaleX)
+			if sx >= srcW {
+				sx = srcW - 1
+			}
+			out.SetNRGBA(x, y, toNRGBA(img.At(sx, sy)))
+		}
+	}
+	return out
 }
