@@ -8,11 +8,9 @@ Drag & drop images onto a Fabric.js canvas, preview your custom wrap in real-tim
 
 ---
 
-## Screenshots / 截图
+## Screenshot / 截图
 
-| Model Select | Canvas Preview | Result Download |
-|-------------|---------------|-----------------|
-| Choose vehicle template | Drag hood/left/right/rear images | Preview modal → Save PNG |
+![Demo Result](docs/demo-result.png)
 
 ---
 
