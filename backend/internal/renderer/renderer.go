@@ -1,9 +1,12 @@
 package renderer
 
 import (
+	"fmt"
 	"image"
 	"image/color"
 	"image/draw"
+	_ "image/gif"
+	_ "image/jpeg"
 	"image/png"
 	"io"
 	"log"
@@ -15,13 +18,11 @@ import (
 )
 
 // Renderer handles image composition for Tesla wrap templates
-type Renderer struct {
-	registry *model.Registry
-}
+type Renderer struct{}
 
 // New creates a new renderer
-func New(registry *model.Registry) *Renderer {
-	return &Renderer{registry: registry}
+func New() *Renderer {
+	return &Renderer{}
 }
 
 // ViewAdjust represents user adjustments for a view
@@ -40,6 +41,10 @@ type RenderOptions struct {
 
 // Render composites user images onto the vehicle template
 func (r *Renderer) Render(m *model.VehicleModel, images map[string]io.Reader, opts ...RenderOptions) (image.Image, error) {
+	if m == nil {
+		return nil, fmt.Errorf("model is required")
+	}
+
 	var options RenderOptions
 	if len(opts) > 0 {
 		options = opts[0]
@@ -47,14 +52,7 @@ func (r *Renderer) Render(m *model.VehicleModel, images map[string]io.Reader, op
 	if options.Adjustments == nil {
 		options.Adjustments = make(map[string]ViewAdjust)
 	}
-	// Load template
-	templateFile, err := os.Open(m.TemplatePath)
-	if err != nil {
-		return nil, err
-	}
-	defer templateFile.Close()
-
-	templateImg, err := png.Decode(templateFile)
+	templateImg, err := m.TemplateImage()
 	if err != nil {
 		return nil, err
 	}
@@ -107,44 +105,28 @@ func (r *Renderer) Render(m *model.VehicleModel, images map[string]io.Reader, op
 			scaled = scaleImageAbsolute(scaled, int(float64(view.W)*scaleFactor), int(float64(view.H)*scaleFactor))
 		}
 
-		// Place the scaled image onto the template with offset adjustment
-		offsetX := view.X + adj.OffsetX
-		offsetY := view.Y + adj.OffsetY
-		viewRect := image.Rect(offsetX, offsetY, offsetX+view.W, offsetY+view.H)
-		draw.Draw(out, viewRect, scaled, image.Point{0, 0}, draw.Over)
+		// Center transformed content in the target region, then apply user offsets.
+		drawViewImage(out, view, adj.OffsetX, adj.OffsetY, scaled)
 	}
 
 	// Apply gap color matching between adjacent views
 	r.matchGapColors(out, m)
 
-	// Restore black outlines from template (overlay the template on top)
-	finalOut := image.NewNRGBA(bounds)
-	draw.Draw(finalOut, bounds, out, bounds.Min, draw.Src)
-
 	// Composite template on top so black outlines and text remain visible
-	// But only where template has black pixels (outlines, text)
-	templateNRGBA := convertToNRGBA(templateImg)
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
 		for x := bounds.Min.X; x < bounds.Max.X; x++ {
-			tc := templateNRGBA.At(x, y).(color.NRGBA)
+			tc := templateImg.NRGBAAt(x, y)
 			if tc.R < 50 && tc.G < 50 && tc.B < 50 && tc.A > 128 {
-				// Black pixel from template - preserve it
-				finalOut.SetNRGBA(x, y, tc)
+				out.SetNRGBA(x, y, tc)
 			}
 		}
 	}
 
-	return finalOut, nil
+	return out, nil
 }
 
 // matchGapColors blends colors across view gaps for seamless appearance
 func (r *Renderer) matchGapColors(img *image.NRGBA, m *model.VehicleModel) {
-	// Build a map of views by name for easy lookup
-	viewMap := make(map[string]model.View)
-	for _, v := range m.Views {
-		viewMap[v.Name] = v
-	}
-
 	for _, view := range m.Views {
 		if view.GapMatch == "" {
 			continue
@@ -326,6 +308,9 @@ func blendVerticalGap(img *image.NRGBA, top, bottom model.View) {
 			A: 255,
 		}
 	}
+	if topCount == 0 || bottomCount == 0 {
+		return
+	}
 
 	overlapX := max(top.X, bottom.X)
 	overlapEndX := min(top.X+top.W, bottom.X+bottom.W)
@@ -346,18 +331,46 @@ func blendVerticalGap(img *image.NRGBA, top, bottom model.View) {
 	}
 }
 
+func drawViewImage(dst *image.NRGBA, view model.View, offsetX, offsetY int, src image.Image) {
+	targetRect := image.Rect(view.X, view.Y, view.X+view.W, view.Y+view.H)
+	srcBounds := src.Bounds()
+	srcW := srcBounds.Dx()
+	srcH := srcBounds.Dy()
+	if srcW == 0 || srcH == 0 {
+		return
+	}
+
+	drawRect := image.Rect(
+		targetRect.Min.X+(targetRect.Dx()-srcW)/2+offsetX,
+		targetRect.Min.Y+(targetRect.Dy()-srcH)/2+offsetY,
+		targetRect.Min.X+(targetRect.Dx()-srcW)/2+offsetX+srcW,
+		targetRect.Min.Y+(targetRect.Dy()-srcH)/2+offsetY+srcH,
+	)
+
+	clipRect := drawRect.Intersect(targetRect).Intersect(dst.Bounds())
+	if clipRect.Empty() {
+		return
+	}
+
+	sourcePoint := srcBounds.Min.Add(clipRect.Min.Sub(drawRect.Min))
+	draw.Draw(dst, clipRect, src, sourcePoint, draw.Over)
+}
+
 // scaleImageAbsolute scales an image to exact target dimensions
 func scaleImageAbsolute(img image.Image, targetW, targetH int) image.Image {
 	if targetW <= 0 || targetH <= 0 {
 		return img
 	}
-	out := image.NewNRGBA(image.Rect(0, 0, targetW, targetH))
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 	if srcW == 0 || srcH == 0 {
 		return img
 	}
+	if srcW == targetW && srcH == targetH {
+		return convertToNRGBA(img)
+	}
+	out := image.NewNRGBA(image.Rect(0, 0, targetW, targetH))
 	scaleX := float64(targetW) / float64(srcW)
 	scaleY := float64(targetH) / float64(srcH)
 	for y := 0; y < targetH; y++ {
@@ -381,6 +394,12 @@ func scaleImage(img image.Image, targetW, targetH int) image.Image {
 
 	if srcW == 0 || srcH == 0 {
 		return img
+	}
+	if targetW <= 0 || targetH <= 0 {
+		return img
+	}
+	if srcW == targetW && srcH == targetH {
+		return convertToNRGBA(img)
 	}
 
 	// scaling factor for bilinear sample mapping
@@ -500,6 +519,9 @@ func toNRGBA(c color.Color) color.NRGBA {
 }
 
 func convertToNRGBA(img image.Image) *image.NRGBA {
+	if out, ok := img.(*image.NRGBA); ok {
+		return out
+	}
 	bounds := img.Bounds()
 	out := image.NewNRGBA(bounds)
 	for y := bounds.Min.Y; y < bounds.Max.Y; y++ {
@@ -510,12 +532,11 @@ func convertToNRGBA(img image.Image) *image.NRGBA {
 	return out
 }
 
-// Ensure interfaces are satisfied
-var _ io.Reader = nil
-
 // SavePNG saves a PNG image to file
 func SavePNG(path string, img image.Image) error {
-	os.MkdirAll(filepath.Dir(path), 0755)
+	if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+		return err
+	}
 	f, err := os.Create(path)
 	if err != nil {
 		return err

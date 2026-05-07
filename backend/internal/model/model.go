@@ -2,12 +2,16 @@ package model
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"image"
+	"image/draw"
+	"image/png"
 	"os"
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 )
 
 // View defines a view region in the template
@@ -32,6 +36,10 @@ type VehicleModel struct {
 	TemplatePath     string
 	VehicleImagePath string
 	Views            []View
+
+	templateOnce  sync.Once
+	templateImage *image.NRGBA
+	templateErr   error
 }
 
 // ViewNames returns the names of all non-skipped views
@@ -45,6 +53,31 @@ func (m *VehicleModel) ViewNames() []string {
 	return names
 }
 
+// TemplateImage returns a cached decoded template image.
+func (m *VehicleModel) TemplateImage() (*image.NRGBA, error) {
+	m.templateOnce.Do(func() {
+		f, err := os.Open(m.TemplatePath)
+		if err != nil {
+			m.templateErr = err
+			return
+		}
+		defer f.Close()
+
+		img, err := png.Decode(f)
+		if err != nil {
+			m.templateErr = err
+			return
+		}
+
+		bounds := img.Bounds()
+		out := image.NewNRGBA(bounds)
+		draw.Draw(out, bounds, img, bounds.Min, draw.Src)
+		m.templateImage = out
+	})
+
+	return m.templateImage, m.templateErr
+}
+
 // ViewMappingJSON represents the JSON structure for view mappings
 type ViewMappingJSON struct {
 	Width  int        `json:"width"`
@@ -54,57 +87,81 @@ type ViewMappingJSON struct {
 
 // Registry manages all vehicle models
 type Registry struct {
+	mu        sync.RWMutex
 	modelsDir string
 	models    map[string]*VehicleModel
 }
 
 // NewRegistry creates a new registry
 func NewRegistry(modelsDir string) *Registry {
-	r := &Registry{
+	return &Registry{
 		modelsDir: modelsDir,
 		models:    make(map[string]*VehicleModel),
 	}
-	if modelsDir != "" {
-		r.Reload()
-	}
-	return r
 }
 
 // SetModelsDir updates the models directory
 func (r *Registry) SetModelsDir(dir string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	r.modelsDir = dir
 }
 
 // Reload rescans the models directory
-func (r *Registry) Reload() {
-	if r.modelsDir == "" {
-		return
+func (r *Registry) Reload() error {
+	r.mu.RLock()
+	modelsDir := r.modelsDir
+	r.mu.RUnlock()
+
+	if modelsDir == "" {
+		return nil
 	}
 
-	entries, err := os.ReadDir(r.modelsDir)
+	entries, err := os.ReadDir(modelsDir)
 	if err != nil {
-		return
+		return err
 	}
 
+	models := make(map[string]*VehicleModel, len(entries))
+	var loadErrs []error
 	for _, entry := range entries {
 		if !entry.IsDir() {
 			continue
 		}
-		m, err := loadModel(entry.Name(), filepath.Join(r.modelsDir, entry.Name()))
-		if err == nil {
-			r.models[entry.Name()] = m
+
+		modelID := entry.Name()
+		if !isSafeModelID(modelID) {
+			loadErrs = append(loadErrs, fmt.Errorf("skipping invalid model directory %q", modelID))
+			continue
 		}
+
+		m, err := loadModel(modelID, filepath.Join(modelsDir, modelID))
+		if err != nil {
+			loadErrs = append(loadErrs, err)
+			continue
+		}
+		models[modelID] = m
 	}
+
+	r.mu.Lock()
+	r.models = models
+	r.mu.Unlock()
+
+	return errors.Join(loadErrs...)
 }
 
 // Get returns a model by ID
 func (r *Registry) Get(id string) (*VehicleModel, bool) {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	m, ok := r.models[id]
 	return m, ok
 }
 
 // List returns all models sorted by ID
 func (r *Registry) List() []*VehicleModel {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	result := make([]*VehicleModel, 0, len(r.models))
 	for _, m := range r.models {
 		result = append(result, m)
@@ -117,6 +174,10 @@ func (r *Registry) List() []*VehicleModel {
 
 // loadModel loads a vehicle model from a directory
 func loadModel(id, dir string) (*VehicleModel, error) {
+	if !isSafeModelID(id) {
+		return nil, fmt.Errorf("invalid model ID %q", id)
+	}
+
 	templatePath := filepath.Join(dir, "template.png")
 	vehicleImagePath := filepath.Join(dir, "vehicle_image.png")
 
@@ -128,14 +189,13 @@ func loadModel(id, dir string) (*VehicleModel, error) {
 	defer templateFile.Close()
 
 	// Decode template to get dimensions
-	templateImg, _, err := image.Decode(templateFile)
+	templateConfig, err := png.DecodeConfig(templateFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to decode template for %s: %w", id, err)
 	}
 
-	bounds := templateImg.Bounds()
-	w := bounds.Dx()
-	h := bounds.Dy()
+	w := templateConfig.Width
+	h := templateConfig.Height
 
 	// Check for vehicle_image
 	if _, err := os.Stat(vehicleImagePath); os.IsNotExist(err) {
@@ -165,30 +225,28 @@ func loadModel(id, dir string) (*VehicleModel, error) {
 		}
 	}
 
-	// Fallback: try loading from view_mappings.json in parent directory
-	mappingsPath := filepath.Join(filepath.Dir(dir), "view_mappings.json")
-	if data, err := os.ReadFile(mappingsPath); err == nil {
-		var allMappings map[string]ViewMappingJSON
-		if err := json.Unmarshal(data, &allMappings); err == nil {
-			if vm, ok := allMappings[id]; ok {
-				// Filter out skipped views
-				var views []View
-				for _, v := range vm.Views {
-					if !v.Skip {
-						views = append(views, v)
-					}
-				}
-				m.Views = views
-				return m, nil
-			}
-		}
-	}
-
 	// Fallback: auto-detect view regions
+	templateImg, err := m.TemplateImage()
+	if err != nil {
+		return nil, fmt.Errorf("failed to load template for %s: %w", id, err)
+	}
 	views := detectViewRegions(templateImg)
 	m.Views = views
 
 	return m, nil
+}
+
+func isSafeModelID(id string) bool {
+	if id == "" || strings.Contains(id, "..") {
+		return false
+	}
+	for _, r := range id {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // displayName converts an ID like "model3-2024-base" to "Model 3 (2024+) Standard & Premium"
@@ -401,16 +459,20 @@ func LoadViewMappings(path string) error {
 		return err
 	}
 
-	// Store mappings for later use during model loading
+	viewMappingsMu.Lock()
 	viewMappingsCache = allMappings
+	viewMappingsMu.Unlock()
 	return nil
 }
 
 // viewMappingsCache holds pre-computed view coordinates
 var viewMappingsCache map[string]ViewMappingJSON
+var viewMappingsMu sync.RWMutex
 
 // getViewMappingsForModel returns cached mappings for a model ID
 func getViewMappingsForModel(id string) (ViewMappingJSON, bool) {
+	viewMappingsMu.RLock()
+	defer viewMappingsMu.RUnlock()
 	if viewMappingsCache == nil {
 		return ViewMappingJSON{}, false
 	}
