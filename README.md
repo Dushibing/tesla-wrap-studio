@@ -54,12 +54,15 @@ Upload 5 photos (front, rear, left, right, top) of your Tesla, drag to adjust, a
 
 ## Quick Start / 快速开始
 
-### 1. Download the binary / 下载二进制文件
+### 1. Download / 下载
 
-**macOS / Linux:**
+**⬇️ [Download v1.0.0 Binary](https://github.com/Dushibing/tesla-wrap-studio/releases/download/v1.0.0/tesla-wrap-studio)** (macOS/Linux, 9MB)
+
+Or build from source / 或源码编译:
+
 ```bash
-# Download the latest release (or build from source)
-# 下载最新版本（或源码编译）
+cd backend
+go build -o tesla-wrap-studio .
 ```
 
 ### 2. Run the server / 启动服务
