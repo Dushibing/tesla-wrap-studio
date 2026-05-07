@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"image/png"
@@ -131,8 +132,13 @@ func handleRender(rend *renderer.Renderer, registry *model.Registry) http.Handle
 			if err != nil {
 				continue
 			}
-			defer file.Close()
-			images[view.Name] = file
+			data, err := io.ReadAll(file)
+			file.Close()
+			if err != nil {
+				log.Printf("Warning: failed to read uploaded image for view %s: %v", view.Name, err)
+				continue
+			}
+			images[view.Name] = bytes.NewReader(data)
 		}
 
 		if len(images) == 0 {
