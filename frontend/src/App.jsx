@@ -325,12 +325,14 @@ export default function App() {
                             height: `${(view.h / modelDetails.height) * 100}%`,
                             borderColor: isSelected ? '#fff' : VIEW_COLORS[view.name],
                             zIndex: isSelected ? 10 : 1,
+                            transform: `scale(${adj.scale / 100})`,
+                            transformOrigin: 'center center',
                           }}
                           onMouseDown={e => handleOverlayMouseDown(e, view.name)}
                           onWheel={e => handleOverlayWheel(e, view.name)}>
                           <div className="overlay-image-wrapper"
                             style={{
-                              transform: `scale(${adj.scale / 100}) rotate(${adj.rotate || 0}deg) translate(${adj.offsetX || 0}px, ${adj.offsetY || 0}px)`,
+                              transform: `rotate(${adj.rotate || 0}deg) translate(${adj.offsetX || 0}px, ${adj.offsetY || 0}px)`,
                               transformOrigin: 'center center',
                             }}>
                             <img src={imgUrl} alt={view.name}

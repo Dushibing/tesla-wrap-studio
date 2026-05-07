@@ -1,0 +1,562 @@
+{
+  "cybertruck": {
+    "width": 1024,
+    "height": 768,
+    "views": [
+      {
+        "name": "front",
+        "x": 0,
+        "y": 0,
+        "w": 1024,
+        "h": 256,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 0,
+        "y": 0,
+        "w": 1024,
+        "h": 256,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 0,
+        "y": 258,
+        "w": 1024,
+        "h": 255,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 0,
+        "y": 258,
+        "w": 1024,
+        "h": 255,
+        "gap_match": "left"
+      },
+      {
+        "name": "top",
+        "x": 0,
+        "y": 258,
+        "w": 1024,
+        "h": 255,
+        "gap_match": ""
+      }
+    ]
+  },
+  "model3": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 276,
+        "y": 25,
+        "w": 472,
+        "h": 999,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 80,
+        "y": 131,
+        "w": 198,
+        "h": 893,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 749,
+        "y": 131,
+        "w": 198,
+        "h": 893,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 277,
+        "y": 172,
+        "w": 234,
+        "h": 852,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 511,
+        "y": 172,
+        "w": 513,
+        "h": 852,
+        "gap_match": "left"
+      },
+      {
+        "name": "top_body",
+        "x": 368,
+        "y": 175,
+        "w": 287,
+        "h": 224,
+        "skip": true
+      }
+    ]
+  },
+  "model3-2024-base": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 241,
+        "y": 24,
+        "w": 548,
+        "h": 1000,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 783,
+        "y": 36,
+        "w": 207,
+        "h": 988,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 41,
+        "y": 38,
+        "w": 206,
+        "h": 986,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 11,
+        "y": 317,
+        "w": 503,
+        "h": 707,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 514,
+        "y": 317,
+        "w": 510,
+        "h": 707,
+        "gap_match": "left"
+      }
+    ]
+  },
+  "model3-2024-performance": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 252,
+        "y": 19,
+        "w": 522,
+        "h": 1005,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 782,
+        "y": 36,
+        "w": 208,
+        "h": 988,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 40,
+        "y": 37,
+        "w": 207,
+        "h": 987,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 10,
+        "y": 316,
+        "w": 504,
+        "h": 708,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 514,
+        "y": 316,
+        "w": 510,
+        "h": 708,
+        "gap_match": "left"
+      }
+    ]
+  },
+  "models-2021": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 266,
+        "y": 18,
+        "w": 491,
+        "h": 1006,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 114,
+        "y": 95,
+        "w": 140,
+        "h": 929,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 770,
+        "y": 95,
+        "w": 140,
+        "h": 929,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 335,
+        "y": 257,
+        "w": 177,
+        "h": 767,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 512,
+        "y": 257,
+        "w": 512,
+        "h": 767,
+        "gap_match": "left"
+      }
+    ]
+  },
+  "models-2025-plaid": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 287,
+        "y": 7,
+        "w": 447,
+        "h": 1017,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 114,
+        "y": 95,
+        "w": 140,
+        "h": 929,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 770,
+        "y": 95,
+        "w": 140,
+        "h": 929,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 334,
+        "y": 257,
+        "w": 178,
+        "h": 767,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 512,
+        "y": 257,
+        "w": 512,
+        "h": 767,
+        "gap_match": "left"
+      }
+    ]
+  },
+  "modelx-2021": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 296,
+        "y": 4,
+        "w": 431,
+        "h": 1020,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 172,
+        "y": 146,
+        "w": 119,
+        "h": 878,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 729,
+        "y": 147,
+        "w": 120,
+        "h": 877,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 364,
+        "y": 271,
+        "w": 145,
+        "h": 753,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 509,
+        "y": 270,
+        "w": 515,
+        "h": 754,
+        "gap_match": "left"
+      }
+    ]
+  },
+  "modely-2025-base": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 268,
+        "y": 6,
+        "w": 482,
+        "h": 1018,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 157,
+        "y": 104,
+        "w": 174,
+        "h": 920,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 706,
+        "y": 105,
+        "w": 168,
+        "h": 919,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 154,
+        "y": 343,
+        "w": 361,
+        "h": 681,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 515,
+        "y": 349,
+        "w": 509,
+        "h": 675,
+        "gap_match": "left"
+      }
+    ]
+  },
+  "modely-2025-performance": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 221,
+        "y": 3,
+        "w": 580,
+        "h": 1021,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 110,
+        "y": 114,
+        "w": 221,
+        "h": 910,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 693,
+        "y": 114,
+        "w": 218,
+        "h": 910,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 82,
+        "y": 348,
+        "w": 428,
+        "h": 676,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 510,
+        "y": 349,
+        "w": 514,
+        "h": 675,
+        "gap_match": "left"
+      }
+    ]
+  },
+  "modely-2025-premium": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 245,
+        "y": 9,
+        "w": 532,
+        "h": 1015,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 111,
+        "y": 114,
+        "w": 220,
+        "h": 910,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 694,
+        "y": 114,
+        "w": 218,
+        "h": 910,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 82,
+        "y": 348,
+        "w": 428,
+        "h": 676,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 510,
+        "y": 350,
+        "w": 514,
+        "h": 674,
+        "gap_match": "left"
+      }
+    ]
+  },
+  "modely-l": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 240,
+        "y": 22,
+        "w": 548,
+        "h": 1002,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 30,
+        "y": 15,
+        "w": 213,
+        "h": 1009,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 791,
+        "y": 16,
+        "w": 211,
+        "h": 1008,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 245,
+        "y": 157,
+        "w": 270,
+        "h": 867,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 515,
+        "y": 160,
+        "w": 509,
+        "h": 864,
+        "gap_match": "left"
+      }
+    ]
+  },
+  "modely": {
+    "width": 1024,
+    "height": 1024,
+    "views": [
+      {
+        "name": "top",
+        "x": 254,
+        "y": 9,
+        "w": 517,
+        "h": 1015,
+        "gap_match": "bottom"
+      },
+      {
+        "name": "front",
+        "x": 27,
+        "y": 9,
+        "w": 227,
+        "h": 1015,
+        "gap_match": "right"
+      },
+      {
+        "name": "rear",
+        "x": 769,
+        "y": 9,
+        "w": 226,
+        "h": 1015,
+        "gap_match": "left"
+      },
+      {
+        "name": "left",
+        "x": 30,
+        "y": 284,
+        "w": 483,
+        "h": 740,
+        "gap_match": "right"
+      },
+      {
+        "name": "right",
+        "x": 513,
+        "y": 283,
+        "w": 511,
+        "h": 741,
+        "gap_match": "left"
+      }
+    ]
+  }
+}
