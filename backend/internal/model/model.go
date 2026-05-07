@@ -396,16 +396,93 @@ func findWhiteRegions(img image.Image) []View {
 	return regions
 }
 
-// nameViews assigns view names based on position analysis
+// nameViews assigns view names based on position analysis.
+// Handles both landscape (horizontal) and portrait (vertical) templates.
 func nameViews(views []View, tmplW, tmplH int) {
 	if len(views) == 0 {
 		return
 	}
 
-	// Calculate mid-point of template
-	midY := tmplH / 2
+	isLandscape := tmplW > tmplH
 
-	// Separate into rows based on vertical position
+	// For landscape templates (e.g., Cybertruck 1024x768), split by X (columns).
+	// For portrait/square templates (1024x1024), split by Y (rows).
+	if isLandscape {
+		midX := tmplW / 2
+		var leftCol, rightCol []*View
+		for i := range views {
+			if views[i].X+views[i].W/2 < midX {
+				leftCol = append(leftCol, &views[i])
+			} else {
+				rightCol = append(rightCol, &views[i])
+			}
+		}
+
+		// If views span full width (wireframe template), fall back to Y-based rows
+		allFullWidth := true
+		for _, v := range views {
+			if v.X > 0 || v.W < tmplW-10 {
+				allFullWidth = false
+				break
+			}
+		}
+		if allFullWidth {
+			// Wireframe template: views are stacked vertically
+			midY := tmplH / 2
+			var topRow, bottomRow []*View
+			for i := range views {
+				if views[i].Y+views[i].H/2 < midY {
+					topRow = append(topRow, &views[i])
+				} else {
+					bottomRow = append(bottomRow, &views[i])
+				}
+			}
+			sort.Slice(topRow, func(i, j int) bool { return topRow[i].X < topRow[j].X })
+			sort.Slice(bottomRow, func(i, j int) bool { return bottomRow[i].X < bottomRow[j].X })
+			// Wireframe naming: top row = front/rear, bottom row = left/right/top
+			if len(topRow) >= 1 {
+				topRow[0].Name = "front"
+			}
+			if len(topRow) >= 2 {
+				topRow[1].Name = "rear"
+			}
+			for i, v := range bottomRow {
+				switch i {
+				case 0: v.Name = "left"
+				case 1: v.Name = "right"
+				case 2: v.Name = "top"
+				}
+			}
+			return
+		}
+
+		// Column-based naming for landscape templates
+		sort.Slice(leftCol, func(i, j int) bool { return leftCol[i].Y < leftCol[j].Y })
+		sort.Slice(rightCol, func(i, j int) bool { return rightCol[i].Y < rightCol[j].Y })
+
+		// Left column: front (top) / left door (bottom)
+		if len(leftCol) >= 1 { leftCol[0].Name = "front" }
+		if len(leftCol) >= 2 { leftCol[1].Name = "left" }
+		// Right column: rear (top) / right door (bottom)
+		if len(rightCol) >= 1 { rightCol[0].Name = "rear" }
+		if len(rightCol) >= 2 { rightCol[1].Name = "right" }
+
+		// Any remaining views in center → top
+		var centerViews []*View
+		for i := range views {
+			view := &views[i]
+			if view.Name == "" {
+				centerViews = append(centerViews, view)
+			}
+		}
+		for _, v := range centerViews {
+			v.Name = "top"
+		}
+		return
+	}
+
+	// Portrait/square template: current Y-based logic
+	midY := tmplH / 2
 	var topRow, bottomRow []*View
 	for i := range views {
 		if views[i].Y+views[i].H/2 < midY {
@@ -415,13 +492,9 @@ func nameViews(views []View, tmplW, tmplH int) {
 		}
 	}
 
-	// Sort each row by X
 	sort.Slice(topRow, func(i, j int) bool { return topRow[i].X < topRow[j].X })
 	sort.Slice(bottomRow, func(i, j int) bool { return bottomRow[i].X < bottomRow[j].X })
 
-	// Assign names: typical Tesla template layout
-	// Top row: front, rear, (possibly top)
-	// Bottom row: left, right, top (if top not in top row)
 	if len(topRow) >= 1 {
 		topRow[0].Name = "front"
 	}
