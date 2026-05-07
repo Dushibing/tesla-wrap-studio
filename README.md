@@ -8,7 +8,7 @@ Drag & drop images onto a Fabric.js canvas, preview your custom wrap in real-tim
 
 ---
 
-## Screenshot / 截图
+## 生成示例 / Generated Example
 
 ![Demo Result](docs/demo-result.png)
 
